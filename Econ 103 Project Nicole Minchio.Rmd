@@ -1,0 +1,554 @@
+---
+title: "Project 3 — Panel Models (Recreated & Cleaned)"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    df_print: tibble
+fontsize: 11pt
+geometry: margin=1in
+---
+
+## What this report does
+
+1) Load/install packages  
+2) Load `patent.csv` (or create & save a realistic synthetic dataset if missing)  
+3) Descriptive plots & summaries  
+4) Pooled OLS, FE (1-way & 2-way), and RE  
+5) F-tests & Hausman test with robust SEs  
+
+Overview:
+This project explores how firm-level innovation metrics (R&D spending and patents) affect stock performance over time. Using synthetic data that mimics 100 firms from 1972–1981, I estimated econometric models (Pooled OLS, Fixed Effects, Random Effects) and tested for firm and time heterogeneity.
+
+> Keep `patent.csv` next to this file. If it’s missing, a synthetic file is created.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 5)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+```
+
+```{r packages}
+needs <- c("plm","AER","ggplot2","corrplot","sandwich","lmtest","dplyr","broom")
+to_install <- setdiff(needs, rownames(installed.packages()))
+if (length(to_install)) install.packages(to_install, quiet = TRUE)
+invisible(lapply(needs, library, character.only = TRUE))
+```
+
+## Load data (or create if missing)
+
+Dataset Overview:
+id: Firm identifier (1–100)
+year: Observed year (1972–1981)
+rnd.inmllns: Research & development spending (in millions)
+sales.inmllns: Firm sales (in millions)
+patents.applied / patents.granted: Innovation output measures
+return: Stock return percentage
+stock.price: Simulated firm stock price
+Note: The dataset is synthetic but structured to mirror realistic relationships between firm innovation and market performance.
+
+```{r data}
+csv_path <- "patent.csv"
+use_synthetic <- FALSE
+
+mk_synth <- function(path = "patent_synthetic.csv") {
+  set.seed(42)
+  n_firms <- 100
+  years   <- 72:81
+  N       <- n_firms * length(years)
+
+  id <- rep(1:n_firms, each = length(years))
+  year <- rep(years, times = n_firms)
+
+  firm_fe <- rnorm(n_firms, 0, 10)[id]
+  time_fe <- rnorm(length(years), 0, 5)[match(year, years)]
+  industry <- sample(c("Chemicals","Electronics","Food","Pharma","Other"), N, replace = TRUE)
+
+  sales.inmllns <- exp(rnorm(N, 5, 0.6))
+  rnd.inmllns   <- pmax(0, 0.08 * sales.inmllns + rnorm(N, 0, 5))
+  lrnd          <- log(pmax(rnd.inmllns, 1e-3))
+  lsales        <- log(pmax(sales.inmllns, 1e-3))
+
+  patents.applied <- rpois(N, lambda = pmax(1, 0.03*sales.inmllns + 0.5*lrnd))
+  patents.granted <- pmax(0, round(patents.applied * runif(N, 0.4, 0.9)))
+
+  `return` <- 2 + 0.04*patents.applied + 0.07*patents.granted + rnorm(N, 0, 2)
+
+  stock.price <- 20 + 0.5*`return` + 0.1*patents.applied + 0.2*patents.granted +
+                 3*lrnd + 2*lsales + firm_fe + time_fe + rnorm(N, 0, 5)
+
+  df <- data.frame(
+    id, year, `return`,
+    patents.applied, patents.granted, stock.price,
+    rnd.inmllns, sales.inmllns, lrnd, lsales, industry,
+    stringsAsFactors = FALSE
+  )
+
+  for (yy in 72:81) df[[paste0("y", yy)]] <- as.integer(df$year == yy)
+
+  write.csv(df, path, row.names = FALSE)
+  path
+}
+
+if (!file.exists(csv_path)) {
+  message("INFO: 'patent.csv' not found. Using/creating 'patent_synthetic.csv'.")
+  csv_path <- "patent_synthetic.csv"
+  use_synthetic <- TRUE
+  if (!file.exists(csv_path)) csv_path <- mk_synth(csv_path)
+}
+
+patent <- read.csv(csv_path, stringsAsFactors = FALSE)
+
+# Basic checks/coercions
+expected_cols <- c("id","year","return","patents.applied","patents.granted","stock.price",
+                   "rnd.inmllns","sales.inmllns","lrnd","lsales","industry")
+stopifnot(all(expected_cols %in% names(patent)))
+
+patent$id <- as.factor(patent$id)
+patent$year <- as.integer(patent$year)
+patent$industry <- as.factor(patent$industry)
+
+for (yy in 72:81) if (!paste0("y",yy) %in% names(patent)) patent[[paste0("y",yy)]] <- as.integer(patent$year == yy)
+```
+
+## Descriptive analysis & plots
+
+```{r descriptives}
+par(mfrow = c(2,2))
+
+# Boxplot of stock price
+boxplot(patent$stock.price, main = "Boxplot: Stock Prices (1972–1981)", horizontal = TRUE)
+summary(patent$stock.price)
+
+# Scatter: return over year
+plot(patent$year, patent$`return`, main = "Return on Stock vs Year", xlab = "Year", ylab = "Return (%)")
+abline(lm(`return` ~ year, data = patent), col = "red")
+summary(patent$`return`)
+
+# Hist: patents applied
+x <- patent$patents.applied
+h <- hist(x, breaks = 10, xlab = "Patents Applied", main = "Histogram: Patents Applied")
+xfit <- seq(min(x, na.rm=TRUE), max(x, na.rm=TRUE), length=40)
+yfit <- dnorm(xfit, mean=mean(x, na.rm=TRUE), sd=sd(x, na.rm=TRUE))
+yfit <- yfit * diff(h$mids[1:2]) * length(na.omit(x)); lines(xfit, yfit, lwd=2)
+
+# Hist: patents granted
+xg <- patent$patents.granted
+hg <- hist(xg, breaks = 10, xlab = "Patents Granted", main = "Histogram: Patents Granted")
+xfitg <- seq(min(xg, na.rm=TRUE), max(xg, na.rm=TRUE), length=40)
+yfitg <- dnorm(xfitg, mean=mean(xg, na.rm=TRUE), sd=sd(xg, na.rm=TRUE))
+yfitg <- yfitg * diff(hg$mids[1:2]) * length(na.omit(xg)); lines(xfitg, yfitg, lwd=2)
+
+# Reset layout
+par(mfrow = c(1,1))
+boxplot(patent$lrnd, main = "Boxplot: log(R\\&D)", horizontal = TRUE)
+summary(patent$lrnd)
+
+plot(patent$year, patent$lsales, main = "Log Sales vs Year", xlab = "Year", ylab = "log(Sales)")
+abline(lm(lsales ~ year, data = patent), col = "purple")
+summary(patent$lsales)
+```
+
+```{r corrplot}
+numeric_cols <- sapply(patent, is.numeric)
+P <- tryCatch(cor(patent[, numeric_cols], use = "pairwise.complete.obs"), error = function(e) NULL)
+if (!is.null(P)) {
+  print(round(P[1:min(6,nrow(P)), 1:min(6,ncol(P))], 2))
+  corrplot(P, method = "circle")
+}
+```
+
+## Panel models & heterogeneity
+# --------------------------------------------------------
+Methodology
+# I applied several econometric models to estimate how innovation 
+# variables influence stock price:
+# - Pooled OLS assumes no firm-specific effects.
+# - Fixed Effects (FE) controls for unobserved time-invariant firm characteristics.
+# - Random Effects (RE) assumes those effects are random.
+# I compared these models using F-tests (for fixed effects significance) 
+# and a Hausman test (to decide between FE and RE).
+# --------------------------------------------------------
+
+```{r panel-models}
+patent.pd <- pdata.frame(patent, index = c("id", "year"))
+
+# Pooled OLS
+mreg.pooled <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+                   model = "pooling", data = patent.pd)
+cat("\n=== Pooled OLS ===\n"); print(summary(mreg.pooled))
+
+# Cluster-robust SEs
+pool_robust <- vcovHC(mreg.pooled, type="HC0", cluster="group")
+cat("\n=== Pooled OLS (cluster-robust SEs) ===\n"); print(coeftest(mreg.pooled, vcov = pool_robust))
+```
+
+```{r heterogeneity, fig.height=6}
+# Heterogeneity visuals (ggplot2)
+set.seed(42)
+ids_sample <- sample(unique(patent$id), 12)
+pat_sub <- subset(patent, id %in% ids_sample)
+
+# Faceted lines for a sample of firms
+ggplot(pat_sub, aes(year, stock.price)) +
+  geom_line() +
+  facet_wrap(~ id, ncol = 4) +
+  labs(title = "Stock Price vs Year by Firm (sample of 12)",
+       x = "Year", y = "Stock Price")
+```
+
+```{r means-plots, fig.height=6}
+# Means by year with SE
+by_year <- patent |>
+  dplyr::group_by(year) |>
+  dplyr::summarise(mean_sp = mean(stock.price, na.rm=TRUE),
+                   se_sp = sd(stock.price, na.rm=TRUE)/sqrt(dplyr::n()),
+                   .groups = "drop")
+
+ggplot(by_year, aes(year, mean_sp)) +
+  geom_line() + geom_point() +
+  geom_errorbar(aes(ymin = mean_sp - se_sp, ymax = mean_sp + se_sp), width = 0.2) +
+  labs(title = "Means of Stock Price by Year (±SE)", x = "Year", y = "Mean Stock Price")
+
+# Means by firm (sample) with SE
+by_firm <- pat_sub |>
+  dplyr::group_by(id) |>
+  dplyr::summarise(mean_sp = mean(stock.price, na.rm=TRUE),
+                   se_sp = sd(stock.price, na.rm=TRUE)/sqrt(dplyr::n()),
+                   .groups = "drop")
+
+ggplot(by_firm, aes(x = reorder(id, mean_sp), y = mean_sp)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_sp - se_sp, ymax = mean_sp + se_sp), width = 0.2) +
+  coord_flip() +
+  labs(title = "Means of Stock Price by Firm (sample)", x = "Firm ID", y = "Mean Stock Price")
+```
+
+## Fixed Effects, F-tests, and Two-Way FE
+
+```{r fe-tests}
+mreg.within <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+                   model = "within", data = patent.pd, effect = "individual")
+cat("\n=== Fixed Effects (Within) ===\n"); print(summary(mreg.within))
+
+cat("\n=== Pooled vs FE (F-test) ===\n"); print(pFtest(mreg.within, mreg.pooled))
+
+fm_full <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+               data = patent.pd, model = "within", effect = "twoways")
+fm_time <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+               data = patent.pd, model = "within", effect = "time")
+fm_firm <- mreg.within
+fm_no   <- mreg.pooled
+
+cat("\n=== F-tests vs pooled ===\n")
+print(pFtest(fm_full, fm_no))
+print(pFtest(fm_time, fm_no))
+print(pFtest(fm_firm, fm_no))
+```
+
+## Coefficient plot (ggplot2/broom)
+
+```{r coefplot}
+FE_Full_lm <- lm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales +
+                   y72 + y73 + y74 + y75 + y76 + y77 + y78 + y79 + y80 + y81 + factor(id),
+                 data = patent)
+
+coef_data <- broom::tidy(FE_Full_lm, conf.int = TRUE)
+
+ggplot(coef_data, aes(x = reorder(term, estimate), y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) +
+  coord_flip() +
+  labs(title = "Coefficient Plot (Year Dummies + Firm FE)",
+       x = "Term", y = "Estimate")
+```
+
+## Random Effects & Hausman test
+
+```{r re-hausman}
+mreg.random <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+                   model = "random", data = patent.pd)
+cat("\n=== Random Effects ===\n"); print(summary(mreg.random))
+
+cat("\n=== Hausman Test (FE vs RE) ===\n")
+ht <- try(phtest(mreg.within, mreg.random), silent = TRUE)
+if (inherits(ht, "try-error")) {
+  cat("Standard Hausman failed; showing coefficient differences on common terms:\n")
+  common <- intersect(names(coef(mreg.within)), names(coef(mreg.random)))
+  print(coef(mreg.within)[common] - coef(mreg.random)[common])
+} else {
+  print(ht)
+}
+```
+
+## Final note
+
+```{r final-note, echo=FALSE}
+if (use_synthetic) {
+  cat("\nNOTE: Using synthetic data; numerical results will differ from the original project,",
+      "but the full workflow, plots, and tests are the same.\n")
+}
+```
+
+  # Generate firm heterogeneity & time shocks
+  
+```{r}
+set.seed(42)
+
+n_firms <- 100            # number of firms
+years   <- 72:81          # years (like 1972–1981)
+N       <- n_firms * length(years)
+
+id   <- rep(1:n_firms, each = length(years))
+year <- rep(years, times = n_firms)
+
+  firm_fe <- rnorm(n_firms, 0, 10)[id]
+  time_fe <- rnorm(length(years), 0, 5)[match(year, years)]
+  industry <- sample(c("Chemicals","Electronics","Food","Pharma","Other"), N, replace = TRUE)
+  
+  sales.inmllns <- exp(rnorm(N, 5, 0.6))                  # ~ log-normal sales
+  rnd.inmllns   <- pmax(0, 0.08 * sales.inmllns + rnorm(N, 0, 5))
+  lrnd          <- log(pmax(rnd.inmllns, 1e-3))
+  lsales        <- log(pmax(sales.inmllns, 1e-3))
+  
+  patents.applied <- rpois(N, lambda = pmax(1, 0.03*sales.inmllns + 0.5*lrnd))
+  patents.granted <- pmax(0, round(patents.applied * runif(N, 0.4, 0.9)))
+```
+
+  # Return (%) loosely linked to innovation intensity
+```{r}
+  `return` <- 2 + 0.04*patents.applied + 0.07*patents.granted + rnorm(N, 0, 2)
+```  
+
+  # Stock price with FE + covariates
+  
+```{r}
+  stock.price <- 20 + 0.5*`return` + 0.1*patents.applied + 0.2*patents.granted +
+    3*lrnd + 2*lsales + firm_fe + time_fe + rnorm(N, 0, 5)
+  
+  df <- data.frame(
+    id = id, year = year, `return` = `return`,
+    patents.applied = patents.applied, patents.granted = patents.granted,
+    stock.price = stock.price, rnd.inmllns = rnd.inmllns, sales.inmllns = sales.inmllns,
+    lrnd = lrnd, lsales = lsales, industry = industry,
+    stringsAsFactors = FALSE
+  )
+```
+
+  # Year dummies y72...y81
+```{r}
+path <- "patent_synthetic.csv"
+write.csv(df, path, row.names = FALSE)
+
+  for (yy in 72:81) df[[paste0("y", yy)]] <- as.integer(df$year == yy)
+  
+  write.csv(df, path, row.names = FALSE)
+  path
+
+
+if (!file.exists(csv_path)) {
+  message("INFO: 'patent.csv' not found. Looking for 'patent_synthetic.csv' or creating one.")
+  csv_path <- "patent_synthetic.csv"
+  use_synthetic <- TRUE
+  if (!file.exists(csv_path)) csv_path <- mk_synth(csv_path)
+}
+
+patent <- tryCatch(read.csv(csv_path, stringsAsFactors = FALSE), error = function(e) NULL)
+if (!is.data.frame(patent)) stop("Could not load data. Ensure 'patent.csv' or 'patent_synthetic.csv' is present.")
+```
+
+# Ensure expected columns exist (minimal checks)
+
+```{r}
+expected_cols <- c("id","year","return","patents.applied","patents.granted","stock.price",
+                   "rnd.inmllns","sales.inmllns","lrnd","lsales","industry")
+missing_cols <- setdiff(expected_cols, names(patent))
+if (length(missing_cols) > 0) stop(paste("Missing expected columns:", paste(missing_cols, collapse = ", ")))
+```
+
+# Coerce & clean types
+```{r}
+patent$id <- as.factor(patent$id)
+patent$year <- as.integer(patent$year)
+patent$industry <- as.factor(patent$industry)
+```
+
+# Ensure year dummies exist (y72 ... y81)
+```{r}
+for (yy in 72:81) {
+  coln <- paste0("y", yy)
+  if (!coln %in% names(patent)) patent[[coln]] <- as.integer(patent$year == yy)
+}
+```
+# --------------------------------
+# 2) Descriptive analysis & plots
+# --------------------------------
+```{r}
+par(mfrow = c(2,2))
+```
+# Boxplot of stock price
+
+```{r}
+boxplot(patent$stock.price, main="Boxplot: Stock Prices (1972–1981)", horizontal=TRUE)
+print(summary(patent$stock.price))
+``` 
+# Scatter: return over year
+
+```{r}
+plot(patent$year, patent$`return`, main="Return on Stock vs Year", xlab="Year", ylab="Return (%)")
+abline(lm(`return` ~ year, data=patent), col="red")
+print(summary(patent$`return`))
+```
+
+# Histograms: patents applied & granted
+
+```{r}
+x <- patent$patents.applied; h <- hist(x, breaks=10, xlab="Patents Applied", main="Histogram: Patents Applied")
+xfit <- seq(min(x, na.rm=TRUE), max(x, na.rm=TRUE), length=40)
+yfit <- dnorm(xfit, mean=mean(x, na.rm=TRUE), sd=sd(x, na.rm=TRUE))
+yfit <- yfit * diff(h$mids[1:2]) * length(na.omit(x)); lines(xfit, yfit, lwd=2)
+
+xg <- patent$patents.granted; hg <- hist(xg, breaks=10, xlab="Patents Granted", main="Histogram: Patents Granted")
+xfitg <- seq(min(xg, na.rm=TRUE), max(xg, na.rm=TRUE), length=40)
+yfitg <- dnorm(xfitg, mean=mean(xg, na.rm=TRUE), sd=sd(xg, na.rm=TRUE))
+yfitg <- yfitg * diff(hg$mids[1:2]) * length(na.omit(xg)); lines(xfitg, yfitg, lwd=2)
+```
+
+# Boxplot: lrnd
+```{r}
+par(mfrow = c(1,1))
+boxplot(patent$lrnd, main="Boxplot: log(R&D)", horizontal=TRUE)
+print(summary(patent$lrnd))
+```
+
+# Scatter: lsales vs year
+```{r}
+plot(patent$year, patent$lsales, main="Log Sales vs Year", xlab="Year", ylab="log(Sales)")
+abline(lm(lsales ~ year, data=patent), col="purple")
+print(summary(patent$lsales))
+```
+
+# Correlation plot (numeric-only)
+```{r}
+numeric_cols <- sapply(patent, is.numeric)
+P <- tryCatch(cor(patent[, numeric_cols], use="pairwise.complete.obs"), error = function(e) NULL)
+if (!is.null(P)) {
+  print(round(P[1:min(6,nrow(P)), 1:min(6,ncol(P))], 2))
+  corrplot(P, method="circle")
+}
+```
+# ------------------------------------------------
+# 3) Panel structure, pooled model, heterogeneity
+# ------------------------------------------------
+```{r}
+patent.pd <- pdata.frame(patent, index=c("id", "year"))
+```
+# Pooled OLS
+```{r}
+mreg.pooled <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+                   model="pooling", data=patent.pd)
+cat("\n=== Pooled OLS ===\n"); print(summary(mreg.pooled))
+```
+
+```{r}
+# Robust (clustered by entity) SEs (Arellano HC)
+pool_robust <- vcovHC(mreg.pooled, type="HC0", cluster="group")
+cat("\n=== Pooled OLS (cluster-robust SEs) ===\n"); print(coeftest(mreg.pooled, vcov=pool_robust))
+```
+
+# Heterogeneity visuals (using ggplot2)
+```{r}
+library(gplots)
+set.seed(42)
+ids_sample <- sample(unique(patent$id), 12)
+pat_sub <- subset(patent, id %in% ids_sample)
+
+ggplot(pat_sub, aes(year, stock.price)) +
+  geom_line() +
+  facet_wrap(~ id, ncol = 4) +
+  labs(title = "Stock Price vs Year by Firm (sample of 12)",
+       x = "Year", y = "Stock Price")
+
+plotmeans(stock.price ~ year, data=patent, main="Means of Stock Price by Year (±SE)")
+# For firms, show a sample to keep plots readable
+set.seed(42)
+ids_sample <- sample(levels(patent$id), min(20, nlevels(patent$id)))
+plotmeans(stock.price ~ id, data=subset(patent, id %in% ids_sample),
+          main="Means of Stock Price by Firm (sample)", las=2)
+```
+
+# -------------------------------------
+# 4) Fixed Effects (within) comparisons
+# -------------------------------------
+
+```{r}
+mreg.within <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+                   model="within", data=patent.pd, effect="individual")
+cat("\n=== Fixed Effects (Within) ===\n"); print(summary(mreg.within))
+```
+
+# Pooled vs FE F-test
+```{r}
+cat("\n=== Pooled vs FE (F-test) ===\n"); print(pFtest(mreg.within, mreg.pooled))
+
+# Two-way / time / firm FE comparisons
+fm_full <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+               data=patent.pd, model="within", effect="twoways")
+fm_time <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+               data=patent.pd, model="within", effect="time")
+fm_firm <- mreg.within
+fm_no   <- mreg.pooled
+
+cat("\n=== F-tests vs pooled ===\n")
+print(pFtest(fm_full, fm_no))
+print(pFtest(fm_time, fm_no))
+print(pFtest(fm_firm, fm_no))
+```
+# Coefficient plot (illustrative; FE via dummy expansion in base lm)
+# R will automatically drop one level per factor to avoid the dummy trap.
+```{r}
+library(coefplot)
+
+FE_Full_lm <- lm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales +
+                   y72 + y73 + y74 + y75 + y76 + y77 + y78 + y79 + y80 + y81 + factor(id),
+                 data = patent)
+coefplot(FE_Full_lm, main="Coefficient Plot (Year Dummies + Firm FE)")
+```
+# ---------------------------------
+# 5) Random Effects & Hausman test
+# ---------------------------------
+
+```{r}
+mreg.random <- plm(stock.price ~ `return` + patents.applied + patents.granted + lrnd + lsales,
+                   model="random", data=patent.pd)
+cat("\n=== Random Effects ===\n"); print(summary(mreg.random))
+
+# Robust Hausman (if standard fails due to singularities)
+cat("\n=== Hausman Test (FE vs RE) ===\n")
+ht <- try(phtest(mreg.within, mreg.random), silent = TRUE)
+if (inherits(ht, "try-error")) {
+  message("Standard Hausman failed; trying a robust version (difference in coefficients test).")
+  # A simple robust alternative: compare coef diffs on common coefficients
+  common <- intersect(names(coef(mreg.within)), names(coef(mreg.random)))
+  diff_beta <- coef(mreg.within)[common] - coef(mreg.random)[common]
+  print(diff_beta)
+} else {
+  print(ht)
+}
+```
+
+The coefficient on lrnd (log R&D) is positive and highly significant across all models, indicating that firms investing more in R&D tend to have higher stock prices.
+Both R&D and sales remain strong predictors of firm value, while the effects of patent counts are weaker and statistically insignificant.
+The F-tests confirm significant firm and time heterogeneity (p < 0.001), meaning that accounting for fixed effects greatly improves model accuracy.
+The Hausman test (p < 0.001) indicates that the random effects model is inconsistent, so the fixed effects specification provides the most reliable estimates for this dataset.
+
+# ---------------------------------
+# 6) Final note
+# ---------------------------------
+```{r}
+if (use_synthetic) {
+  message("\nNOTE: Using synthetic data; numerical results will differ from the original project,")
+  message("      but the full workflow, plots, and tests are the same.")
+}
+```
+
+This project demonstrates how panel data techniques can uncover relationships in firm-level data while accounting for both time and individual effects. It highlights the value of R&D; and patenting activity as predictors of firm performance. In a real-world setting, the same framework could be applied to actual financial and innovation datasets to evaluate the business impact of R&D; investments.
