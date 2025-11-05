@@ -16,7 +16,7 @@ An econometric analysis ew firms’ xploring hoR&D spending and patent activity 
 
 ## 📈 Work Projects
 
-### 🧩 Tentpole Event Analysis – VimXXX (Anonymized)
+### 🧩 [Tentpole Event Analysis – VimXXX (Anonymized)] (https://github.com/nicoleminchio/github.io/blob/main/Slides%20Core%20vs%20More.pptx.pdf)
 An analysis of a paid media tentpole campaign measuring upper-funnel impact on new customer acquisition and brand lift. The study compares Core vs. More audience performance, evaluates conversion trends, and quantifies incremental revenue effects across states using Google Trends and Meta survey data.
 
 ---
