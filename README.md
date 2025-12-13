@@ -7,7 +7,7 @@ This portfolio showcases my academic and professional projects focused on analyt
 
 ## 📊 Featured Projects
 
-### 🧠 [Panel Data Analysis of Firm R&D and Stock Performance](https://github.com/nicoleminchio/github.io/blob/main/Econ%20103%20Project%20Nicole%20Minchio.Rmd)
+### 🧠 [Panel Data Analysis of Firm R&D and Stock Performance](https://github.com/nicoleminchio/github.io/blob/main/Nicole_Minchio_R_File.pdf)
 An econometric analysis exploring how firms’ R&D spending and patent activity influence stock prices.  
 **Methods:** Pooled OLS, Fixed Effects, Random Effects, F-tests, Hausman Test  
 **Tools:** R, ggplot2, plm, dplyr  
@@ -16,7 +16,7 @@ An econometric analysis exploring how firms’ R&D spending and patent activity 
 
 ## 📈 Work Projects
 
-### 🧩 [Tentpole Event Analysis – VimXXX (Anonymized)](https://github.com/nicoleminchio/github.io/blob/main/Slides%20Core%20vs%20More.pptx.pdf)
+### 🧩 [Tentpole Event Analysis – VimXXX (Anonymized)](https://github.com/nicoleminchio/github.io/blob/main/Slides%20Core%20vs%20More.pptx.pdf) 
 An analysis of a paid media tentpole campaign measuring upper-funnel impact on new customer acquisition and brand lift. The study compares Core vs. More audience performance, evaluates conversion trends, and quantifies incremental revenue effects across states using Google Trends and Meta survey data.
 
 ---
