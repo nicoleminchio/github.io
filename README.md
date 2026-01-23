@@ -7,7 +7,7 @@ This portfolio showcases my academic and professional projects focused on analyt
 
 ## 📊 Featured Projects
 
-### 🧠 [Panel Data Analysis of Firm R&D and Stock Performance](https://github.com/nicoleminchio/github.io/blob/main/Nicole_Minchio_R_File.pdf)
+### 🧠 [Panel Data Analysis of Firm R&D and Stock Performance](Updaded_Econ103_Nicole_Minchio.pdf)
 An econometric analysis exploring how firms’ R&D spending and patent activity influence stock prices.  
 **Methods:** Pooled OLS, Fixed Effects, Random Effects, F-tests, Hausman Test  
 **Tools:** R, ggplot2, plm, dplyr  
