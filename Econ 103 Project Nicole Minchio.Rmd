@@ -19,7 +19,6 @@ geometry: margin=1in
 Overview:
 This project explores how firm-level innovation metrics (R&D spending and patents) affect stock performance over time. Using synthetic data that mimics 100 firms from 1972–1981, I estimated econometric models (Pooled OLS, Fixed Effects, Random Effects) and tested for firm and time heterogeneity.
 
-> Keep `patent.csv` next to this file. If it’s missing, a synthetic file is created.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
@@ -34,7 +33,7 @@ if (length(to_install)) install.packages(to_install, quiet = TRUE)
 invisible(lapply(needs, library, character.only = TRUE))
 ```
 
-## Load data (or create if missing)
+## Load data
 
 Dataset Overview:
 id: Firm identifier (1–100)
