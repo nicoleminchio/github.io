@@ -13,6 +13,11 @@ A small agentic AI system built on a 50-company sample of the Crunchbase dataset
 **Methods:** Sentence embeddings, cosine similarity search, LLM classification, tool calling (agent round-trip)  
 **Tools:** Python, pandas, NumPy, sentence-transformers, Gemini API (OpenAI client) 
 
+### 🗄️ [Relational Database Design: Companies and CEOs (PostgreSQL)](postgres-company-ceo-database/company_ceo_database.ipynb)
+A normalized PostgreSQL database linking companies, CEOs and cities, built and queried from Python. The schema uses primary and foreign keys, check constraints and a unique index that handles NULL values, and I tested that each constraint blocks bad data. Ten business questions are answered with multi-table joins.  
+**Methods:** Schema design, normalization, constraints, SQL joins  
+**Tools:** PostgreSQL, Python, psycopg, pandas
+
 ### 🧠 [Panel Data Analysis of Firm R&D and Stock Performance](Updaded_Econ103_Nicole_Minchio.pdf)
 An econometric analysis exploring how firms’ R&D spending and patent activity influence stock prices.  
 **Methods:** Pooled OLS, Fixed Effects, Random Effects, F-tests, Hausman Test  
