@@ -8,7 +8,7 @@ This portfolio showcases my academic and professional projects focused on analyt
 ## 📊 Featured Projects
 
 
-### 🤖 [Agentic AI System on Crunchbase Company Data](crunchbase-agentic-ai/crunchbase_agentic_ai.ipynb)
+### 🤖 [Agentic AI System on Crunchbase Company Data](https://github.com/nicoleminchio/github.io/blob/main/crunchbase_agentic_ai.ipynb)
 A small agentic AI system built on a 50-company sample of the Crunchbase dataset (1.1M records). It searches company descriptions by meaning instead of keywords, classifies a company with an LLM, and runs an agent that decides when to call a tool to answer questions from the data.  
 **Methods:** Sentence embeddings, cosine similarity search, LLM classification, tool calling (agent round-trip)  
 **Tools:** Python, pandas, NumPy, sentence-transformers, Gemini API (OpenAI client) 
