@@ -13,7 +13,7 @@ A small agentic AI system built on a 50-company sample of the Crunchbase dataset
 **Methods:** Sentence embeddings, cosine similarity search, LLM classification, tool calling (agent round-trip)  
 **Tools:** Python, pandas, NumPy, sentence-transformers, Gemini API (OpenAI client) 
 
-### 🗄️ [Relational Database Design: Companies and CEOs (PostgreSQL)](postgres-company-ceo-database/company_ceo_database.ipynb)
+### 🗄️ [Relational Database Design: Companies and CEOs (PostgreSQL)](https://github.com/nicoleminchio/github.io/blob/main/company_ceo_database.ipynb)
 A normalized PostgreSQL database linking companies, CEOs and cities, built and queried from Python. The schema uses primary and foreign keys, check constraints and a unique index that handles NULL values, and I tested that each constraint blocks bad data. Ten business questions are answered with multi-table joins.  
 **Methods:** Schema design, normalization, constraints, SQL joins  
 **Tools:** PostgreSQL, Python, psycopg, pandas
