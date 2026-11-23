@@ -29,8 +29,9 @@ An analysis of a paid media tentpole campaign measuring upper-funnel impact on n
 
 ## 🧰 Skills & Tools
 
-**Languages:** R, SQL  
+**Languages:** R, SQL, Python
 **Analytics:** Econometrics, Regression, Panel Data, Forecasting  
+**AI & LLMs:** Embeddings, Semantic Search, LLM APIs, Tool-Calling Agents 
 **Visualization:** ggplot2, Tableau  
 **Workflow:** GitHub, Excel, RStudio
 
